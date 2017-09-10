@@ -1,0 +1,80 @@
+@import "../../node_modules/bulma/bulma.sass";
+$fa-font-path: "/assets/fonts/vendor/font-awesome";
+@import "../../node_modules/font-awesome/scss/font-awesome.scss";
+
+body {
+  background: #fff;
+  color: #383838;
+  font-family: "Source Sans Pro", Helvetica,Arial, sans-serif;
+}
+
+a {
+  color: #4a90e2;
+  text-decoration: none;
+  &:visited {
+    color: #4a90e2;
+  }
+  &:hover, &:focus, &:active {
+    color: #4a90e2;
+    text-decoration: underline;
+  }
+}
+
+header {
+  background: #4a90e2;
+
+  .logo {
+    width: 10em;
+  }
+
+  .title:not(:last-child) {
+    color: #fff;
+    margin-bottom: 2rem;
+  }
+
+  .subtitle {
+    color: #fff;
+    margin: 0 auto;
+    max-width: 50rem;
+  }
+
+  .example {
+    background: #fff;
+    border-radius: 2%;
+    padding: 5px;
+    width: 50%;
+  }
+
+  .free {
+    > strong {
+      color: #fff;
+    }
+
+    margin-top: 1rem;
+  }
+
+  .button {
+    margin-top: 1rem;
+
+    &:hover, &:focus, &:active {
+      text-decoration: none;
+    }
+  }
+}
+
+section {
+  &.section-off {
+    background: #f5f7f9;
+    border-top: 1px solid #e1e5ea;
+    border-bottom: 1px solid #e1e5ea;
+  }
+
+  .title:not(:last-child) {
+    margin-bottom: 2rem;
+  }
+}
+
+footer {
+  background: #4c5867;
+  color: #fff;
+}
