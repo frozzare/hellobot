@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -15,12 +16,26 @@ import (
 	"github.com/pkg/errors"
 )
 
+type githubIssuesService interface {
+	AddLabelsToIssue(context.Context, string, string, int, []string) ([]*github.Label, *github.Response, error)
+	CreateComment(context.Context, string, string, int, *github.IssueComment) (*github.IssueComment, *github.Response, error)
+}
+
+type githubRepositoriesService interface {
+	DownloadContents(context.Context, string, string, string, *github.RepositoryContentGetOptions) (io.ReadCloser, error)
+}
+
+type githubClient struct {
+	Issues       githubIssuesService
+	Repositories githubRepositoriesService
+}
+
 // Bot represents the bot.
 type Bot struct {
 	id      int
 	cert    string
 	config  *Config
-	client  *github.Client
+	client  *githubClient
 	payload *Payload
 	ctx     context.Context
 }
@@ -84,7 +99,7 @@ func (b *Bot) item() (Item, error) {
 }
 
 // createClient creates a new GitHub client.
-func (b *Bot) createClient() (*github.Client, error) {
+func (b *Bot) createClient() (*githubClient, error) {
 	if b.payload == nil {
 		return nil, errors.New("No payload exists")
 	}
@@ -99,7 +114,12 @@ func (b *Bot) createClient() (*github.Client, error) {
 		return nil, err
 	}
 
-	return github.NewClient(&http.Client{Transport: itr}), nil
+	client := github.NewClient(&http.Client{Transport: itr})
+
+	return &githubClient{
+		Issues:       client.Issues,
+		Repositories: client.Repositories,
+	}, nil
 }
 
 // downloadConfig downloads the bot configuration from GitHub.
