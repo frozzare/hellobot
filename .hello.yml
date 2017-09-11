@@ -1,3 +1,8 @@
+# Ignore users
+ignore:
+  users:
+   - frozzare
+
 # Messages templates for issue and pull request
 issue:
   message: |
