@@ -88,11 +88,13 @@ func (b *Bot) createClient() (*github.Client, error) {
 	if b.payload == nil {
 		return nil, errors.New("No payload exists")
 	}
+
 	tr := http.DefaultTransport
 	itr, err := ghinstallation.NewKeyFromFile(tr, b.id, b.payload.Installation.ID, b.cert)
 	if err != nil {
 		return nil, err
 	}
+
 	return github.NewClient(&http.Client{Transport: itr}), nil
 }
 
