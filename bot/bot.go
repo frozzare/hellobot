@@ -31,6 +31,14 @@ func NewBot(id int, cert string) *Bot {
 
 // validatePayload validates the payload from github.
 func (b *Bot) validatePayload() error {
+	if b.payload == nil {
+		return errors.New("No payload exists")
+	}
+
+	if b.config == nil {
+		return errors.New("No config exists")
+	}
+
 	for _, user := range b.config.Ignore.Users {
 		if strings.ToLower(user) == strings.ToLower(b.payload.Sender.Login) {
 			return fmt.Errorf("User with login %s should be ignored", user)
@@ -49,25 +57,36 @@ func (b *Bot) validatePayload() error {
 }
 
 // number returns the issue or pull request number.
-func (b *Bot) number() int {
+func (b *Bot) number() (int, error) {
+	if b.payload == nil {
+		return 0, errors.New("No payload exists")
+	}
+
 	number := b.payload.Issue.Number
 	if b.payload.IsPullRequest() {
 		number = b.payload.PullRequest.Number
 	}
-	return number
+	return number, nil
 }
 
 // Item returns the message item (issue or pull request)
-func (b *Bot) item() Item {
-	if b.payload.IsPullRequest() {
-		return b.config.PullRequest
+func (b *Bot) item() (Item, error) {
+	if b.config == nil {
+		return Item{}, errors.New("No config exists")
 	}
 
-	return b.config.Issue
+	if b.payload.IsPullRequest() {
+		return b.config.PullRequest, nil
+	}
+
+	return b.config.Issue, nil
 }
 
 // createClient creates a new GitHub client.
 func (b *Bot) createClient() (*github.Client, error) {
+	if b.payload == nil {
+		return nil, errors.New("No payload exists")
+	}
 	tr := http.DefaultTransport
 	itr, err := ghinstallation.NewKeyFromFile(tr, b.id, b.payload.Installation.ID, b.cert)
 	if err != nil {
@@ -78,6 +97,10 @@ func (b *Bot) createClient() (*github.Client, error) {
 
 // downloadConfig downloads the bot configuration from GitHub.
 func (b *Bot) downloadConfig() (*Config, error) {
+	if b.payload == nil {
+		return nil, errors.New("No payload exists")
+	}
+
 	buf, err := b.client.Repositories.DownloadContents(context.Background(), b.payload.Repository.Owner.Login, b.payload.Repository.Name, ".hello.yml", &github.RepositoryContentGetOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "downloading github file")
@@ -133,12 +156,18 @@ func (b *Bot) SayHello(r *http.Request) error {
 	}
 
 	// Get message item (issue or pull requelst).
-	item := b.item()
+	item, err := b.item()
+	if err != nil {
+		return err
+	}
 	if item.Disabled {
 		return errors.New("Item disabled")
 	}
 
-	number := b.number()
+	number, err := b.number()
+	if err != nil {
+		return err
+	}
 
 	// Create GitHub comment.
 	_, _, err = b.client.Issues.CreateComment(
