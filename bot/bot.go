@@ -22,11 +22,12 @@ type Bot struct {
 	config  *Config
 	client  *github.Client
 	payload *Payload
+	ctx     context.Context
 }
 
 // NewBot creates a new bot instance.
 func NewBot(id int, cert string) *Bot {
-	return &Bot{id: id, cert: cert}
+	return &Bot{id: id, cert: cert, ctx: context.Background()}
 }
 
 // validatePayload validates the payload from github.
@@ -101,7 +102,7 @@ func (b *Bot) downloadConfig() (*Config, error) {
 		return nil, errors.New("No payload exists")
 	}
 
-	buf, err := b.client.Repositories.DownloadContents(context.Background(), b.payload.Repository.Owner.Login, b.payload.Repository.Name, ".hello.yml", &github.RepositoryContentGetOptions{})
+	buf, err := b.client.Repositories.DownloadContents(b.ctx, b.payload.Repository.Owner.Login, b.payload.Repository.Name, ".hello.yml", &github.RepositoryContentGetOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "downloading github file")
 	}
@@ -171,7 +172,7 @@ func (b *Bot) SayHello(r *http.Request) error {
 
 	// Create GitHub comment.
 	_, _, err = b.client.Issues.CreateComment(
-		context.Background(),
+		b.ctx,
 		b.payload.Repository.Owner.Login,
 		b.payload.Repository.Name,
 		number,
@@ -187,7 +188,7 @@ func (b *Bot) SayHello(r *http.Request) error {
 	// Add labels to GitHub issue if any.
 	if len(item.Labels) > 0 {
 		_, _, err = b.client.Issues.AddLabelsToIssue(
-			context.Background(),
+			b.ctx,
 			b.payload.Repository.Owner.Login,
 			b.payload.Repository.Name,
 			number,
