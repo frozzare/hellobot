@@ -17,9 +17,11 @@ import (
 
 // Bot represents the bot.
 type Bot struct {
-	id     int
-	cert   string
-	config *Config
+	id      int
+	cert    string
+	config  *Config
+	client  *github.Client
+	payload *Payload
 }
 
 // NewBot creates a new bot instance.
@@ -28,14 +30,14 @@ func NewBot(id int, cert string) *Bot {
 }
 
 // validatePayload validates the payload from github.
-func (b *Bot) validatePayload(payload *Payload) error {
+func (b *Bot) validatePayload() error {
 	for _, user := range b.config.Ignore.Users {
-		if strings.ToLower(user) == strings.ToLower(payload.Sender.Login) {
+		if strings.ToLower(user) == strings.ToLower(b.payload.Sender.Login) {
 			return fmt.Errorf("User with login %s should be ignored", user)
 		}
 	}
 
-	for _, label := range payload.Issue.Labels {
+	for _, label := range b.payload.Issue.Labels {
 		for _, name := range b.config.Ignore.Labels {
 			if strings.ToLower(name) == strings.ToLower(label.Name) {
 				return fmt.Errorf("Issue or pull request with label %s should be ignored", name)
@@ -46,83 +48,106 @@ func (b *Bot) validatePayload(payload *Payload) error {
 	return nil
 }
 
-func (b *Bot) item(p *Payload) Item {
-	if p.IsPullRequest() {
+// number returns the issue or pull request number.
+func (b *Bot) number() int {
+	number := b.payload.Issue.Number
+	if b.payload.IsPullRequest() {
+		number = b.payload.PullRequest.Number
+	}
+	return number
+}
+
+// Item returns the message item (issue or pull request)
+func (b *Bot) item() Item {
+	if b.payload.IsPullRequest() {
 		return b.config.PullRequest
 	}
 
 	return b.config.Issue
 }
 
-// SayHello will take a http request, decode the request body and write a hello comment.
-func (b *Bot) SayHello(r *http.Request) error {
-	var err error
-	var payload *Payload
-
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		return errors.Wrap(err, "unmarshal payload")
-	}
-
-	if payload.Action != "opened" {
-		return errors.New("Only opened action is handled")
-	}
-
-	if payload.Repository.Private {
-		return errors.New("Only public repository can be used")
-	}
-
+// createClient creates a new GitHub client.
+func (b *Bot) createClient() (*github.Client, error) {
 	tr := http.DefaultTransport
-	itr, err := ghinstallation.NewKeyFromFile(tr, b.id, payload.Installation.ID, b.cert)
+	itr, err := ghinstallation.NewKeyFromFile(tr, b.id, b.payload.Installation.ID, b.cert)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	client := github.NewClient(&http.Client{Transport: itr})
+	return github.NewClient(&http.Client{Transport: itr}), nil
+}
 
-	buf, err := client.Repositories.DownloadContents(context.Background(), payload.Repository.Owner.Login, payload.Repository.Name, ".hello.yml", &github.RepositoryContentGetOptions{})
+// downloadConfig downloads the bot configuration from GitHub.
+func (b *Bot) downloadConfig() (*Config, error) {
+	buf, err := b.client.Repositories.DownloadContents(context.Background(), b.payload.Repository.Owner.Login, b.payload.Repository.Name, ".hello.yml", &github.RepositoryContentGetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "downloading github file")
+		return nil, errors.Wrap(err, "downloading github file")
 	}
 
 	data, err := ioutil.ReadAll(buf)
 	if err != nil {
-		return errors.Wrap(err, "reading github file")
+		return nil, errors.Wrap(err, "reading github file")
 	}
 
 	var config *Config
 
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		return errors.Wrap(err, "unmarshal yaml")
+		return nil, errors.Wrap(err, "unmarshal yaml")
 	}
 
-	b.config = config
+	return config, nil
+}
 
-	if err := b.validatePayload(payload); err != nil {
+// SayHello will take a http request, decode the request body and write a hello comment.
+func (b *Bot) SayHello(r *http.Request) error {
+	var err error
+
+	if err := json.NewDecoder(r.Body).Decode(&b.payload); err != nil {
+		return errors.Wrap(err, "unmarshal payload")
+	}
+
+	// Only issues or pull requests with "opened" action is allowed.
+	if b.payload.Action != "opened" {
+		return errors.New("Only opened action is handled")
+	}
+
+	// Only open GitHub projects is allowed.
+	if b.payload.Repository.Private {
+		return errors.New("Only public repository can be used")
+	}
+
+	// Create GitHub client.
+	b.client, err = b.createClient()
+	if err != nil {
+		return err
+	}
+
+	// Download config from GitHub.
+	b.config, err = b.downloadConfig()
+	if err != nil {
+		return err
+	}
+
+	// Validate payload with config values.
+	if err := b.validatePayload(); err != nil {
 		return errors.Wrap(err, "validate payload")
 	}
 
-	if config.Issue.Disabled {
-		return errors.New("Issue comment is disabled")
-	}
-
-	item := b.item(payload)
+	// Get message item (issue or pull requelst).
+	item := b.item()
 	if item.Disabled {
 		return errors.New("Item disabled")
 	}
 
-	number := payload.Issue.Number
-	if payload.IsPullRequest() {
-		number = payload.PullRequest.Number
-	}
+	number := b.number()
 
-	body := strings.Replace(item.Message, "@{author}", payload.Sender.Login, -1)
-
-	_, _, err = client.Issues.CreateComment(
+	// Create GitHub comment.
+	_, _, err = b.client.Issues.CreateComment(
 		context.Background(),
-		payload.Repository.Owner.Login,
-		payload.Repository.Name,
+		b.payload.Repository.Owner.Login,
+		b.payload.Repository.Name,
 		number,
 		&github.IssueComment{
-			Body: github.String(body),
+			Body: github.String(strings.Replace(item.Message, "@{author}", b.payload.Sender.Login, -1)),
 		},
 	)
 
@@ -130,11 +155,12 @@ func (b *Bot) SayHello(r *http.Request) error {
 		return err
 	}
 
+	// Add labels to GitHub issue if any.
 	if len(item.Labels) > 0 {
-		_, _, err = client.Issues.AddLabelsToIssue(
+		_, _, err = b.client.Issues.AddLabelsToIssue(
 			context.Background(),
-			payload.Repository.Owner.Login,
-			payload.Repository.Name,
+			b.payload.Repository.Owner.Login,
+			b.payload.Repository.Name,
 			number,
 			item.Labels,
 		)
