@@ -89,6 +89,10 @@ func (b *Bot) createClient() (*github.Client, error) {
 		return nil, errors.New("No payload exists")
 	}
 
+	if b.client != nil {
+		return b.client, nil
+	}
+
 	tr := http.DefaultTransport
 	itr, err := ghinstallation.NewKeyFromFile(tr, b.id, b.payload.Installation.ID, b.cert)
 	if err != nil {
@@ -102,6 +106,10 @@ func (b *Bot) createClient() (*github.Client, error) {
 func (b *Bot) downloadConfig() (*Config, error) {
 	if b.payload == nil {
 		return nil, errors.New("No payload exists")
+	}
+
+	if b.client == nil {
+		return nil, errors.New("No GitHub client")
 	}
 
 	buf, err := b.client.Repositories.DownloadContents(b.ctx, b.payload.Repository.Owner.Login, b.payload.Repository.Name, ".hello.yml", &github.RepositoryContentGetOptions{})
@@ -170,6 +178,10 @@ func (b *Bot) SayHello(r *http.Request) error {
 	number, err := b.number()
 	if err != nil {
 		return err
+	}
+
+	if b.client == nil {
+		return errors.New("No GitHub client")
 	}
 
 	// Create GitHub comment.
