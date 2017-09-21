@@ -72,6 +72,23 @@ func (b *Bot) validatePayload() error {
 	return nil
 }
 
+// number returns the issue or pull request number.
+func (b *Bot) number() (int, error) {
+	fmt.Println(b.payload)
+	if b.payload == nil {
+		fmt.Println("error")
+		return 0, errors.New("No payload exists")
+	}
+
+	fmt.Println(b.payload.IsPullRequest())
+
+	if b.payload.IsPullRequest() {
+		return b.payload.PullRequest.Number, nil
+	}
+	fmt.Println(b.payload.Issue.Number)
+	return b.payload.Issue.Number, nil
+}
+
 // Item returns the message item (issue or pull request)
 func (b *Bot) item() (Item, error) {
 	if b.config == nil {
@@ -185,18 +202,21 @@ func (b *Bot) SayHello(r *http.Request) error {
 		return errors.New("Item disabled")
 	}
 
+	number, err := b.number()
+	if err != nil {
+		return err
+	}
+
 	if b.client == nil {
 		return errors.New("No GitHub client")
 	}
-
-	fmt.Println("number", b.payload.Number)
 
 	// Create GitHub comment.
 	_, _, err = b.client.Issues.CreateComment(
 		b.ctx,
 		b.payload.Repository.Owner.Login,
 		b.payload.Repository.Name,
-		b.payload.Number,
+		number,
 		&github.IssueComment{
 			Body: github.String(strings.Replace(item.Message, "@{author}", b.payload.Sender.Login, -1)),
 		},
@@ -212,7 +232,7 @@ func (b *Bot) SayHello(r *http.Request) error {
 			b.ctx,
 			b.payload.Repository.Owner.Login,
 			b.payload.Repository.Name,
-			b.payload.Number,
+			number,
 			item.Labels,
 		)
 
