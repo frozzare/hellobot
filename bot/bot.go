@@ -141,10 +141,13 @@ func (b *Bot) downloadConfig() (*Config, error) {
 // SayHello will take a http request, decode the request body and write a hello comment.
 func (b *Bot) SayHello(r *http.Request) error {
 	var err error
+	var payload *Payload
 
-	if err := json.NewDecoder(r.Body).Decode(&b.payload); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		return errors.Wrap(err, "unmarshal payload")
 	}
+
+	b.payload = payload
 
 	// Only issues or pull requests with "opened" action is allowed.
 	if b.payload.Action != "opened" {
