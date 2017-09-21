@@ -31,11 +31,11 @@ var issueOpenedRequest = &http.Request{
 				"default_branch": "master",
 				"name": "Fredrik",
 				"owner": {
-					"login": "frozzare"
+					"login": "test"
 				}
 			},
 			"sender": {
-				"login": "frozzare"
+				"login": "test"
 			},
 			"installation": {
 				"id": 1234
@@ -56,11 +56,11 @@ var issueCreatedRequest = &http.Request{
 				"default_branch": "master",
 				"name": "Fredrik",
 				"owner": {
-					"login": "frozzare"
+					"login": "test"
 				}
 			},
 			"sender": {
-				"login": "frozzare"
+				"login": "test"
 			},
 			"installation": {
 				"id": 1234

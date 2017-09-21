@@ -3,7 +3,6 @@ package bot
 // Payload struct of GitHub webhooks for issues and pull request.
 type Payload struct {
 	Action string `json:"action"`
-	Number int    `json:"number"`
 	Issue  struct {
 		Number int `json:"number"`
 		Labels []struct {

@@ -74,18 +74,14 @@ func (b *Bot) validatePayload() error {
 
 // number returns the issue or pull request number.
 func (b *Bot) number() (int, error) {
-	fmt.Println(b.payload)
 	if b.payload == nil {
-		fmt.Println("error")
 		return 0, errors.New("No payload exists")
 	}
-
-	fmt.Println(b.payload.IsPullRequest())
 
 	if b.payload.IsPullRequest() {
 		return b.payload.PullRequest.Number, nil
 	}
-	fmt.Println(b.payload.Issue.Number)
+
 	return b.payload.Issue.Number, nil
 }
 
