@@ -9,7 +9,7 @@ Visit [https://www.hellobot.xyz/](https://www.hellobot.xyz/) for more informatio
 * `APP_ID` GitHub app id.
 * `CERT` Path to GitHub app cert.
 * `PORT` http port.
-* `STATSD_URL` statsd url (optional).
+* `STATHAT_EMAIL` stathat email (optional).
 * `RAVEN_DSN` Sentry raven dsn (optional).
 
 ## License
