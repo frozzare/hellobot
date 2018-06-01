@@ -1,3 +1,3 @@
 [metadata.heroku]
   root-package = "github.com/frozzare/hellobot"
-  go-version = "1.10.2"
+  go-version = "1.10"
