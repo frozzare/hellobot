@@ -55,6 +55,7 @@ import (
 	"context"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -68,7 +69,13 @@ type Server interface {
 	Shutdowner
 }
 
-// Shutdowner is implemented by *http.Server
+// TLSServer is implemented by *http.Server
+type TLSServer interface {
+	ListenAndServeTLS(string, string) error
+	Shutdowner
+}
+
+// Shutdowner is implemented by *http.Server, and optionally by *http.Server.Handler
 type Shutdowner interface {
 	Shutdown(ctx context.Context) error
 }
@@ -91,7 +98,7 @@ var Timeout = 15 * time.Second
 
 // Format strings used by the logger
 var (
-	ListeningFormat       = "Listening on http://0.0.0.0%s\n"
+	ListeningFormat       = "Listening on http://%s\n"
 	ShutdownFormat        = "\nServer shutdown with timeout: %s\n"
 	ErrorFormat           = "Error: %v\n"
 	FinishedFormat        = "Shutdown finished %ds before deadline\n"
@@ -100,24 +107,37 @@ var (
 )
 
 // LogListenAndServe logs using the logger and then calls ListenAndServe
-func LogListenAndServe(hs *http.Server, loggers ...Logger) {
-	if len(loggers) > 0 {
-		if logger = loggers[0]; logger == nil {
-			logger = log.New(ioutil.Discard, "", 0)
+func LogListenAndServe(s Server, loggers ...Logger) {
+	if hs, ok := s.(*http.Server); ok {
+		logger = getLogger(loggers...)
+
+		if host, port, err := net.SplitHostPort(hs.Addr); err == nil {
+			if host == "" {
+				host = net.IPv4zero.String()
+			}
+
+			logger.Printf(ListeningFormat, net.JoinHostPort(host, port))
 		}
-	} else {
-		logger = log.New(os.Stdout, "", 0)
 	}
 
-	logger.Printf(ListeningFormat, hs.Addr)
-
-	ListenAndServe(hs)
+	ListenAndServe(s)
 }
 
 // ListenAndServe starts the server in a goroutine and then calls Shutdown
 func ListenAndServe(s Server) {
 	go func() {
 		if err := s.ListenAndServe(); err != http.ErrServerClosed {
+			logger.Fatal(err)
+		}
+	}()
+
+	Shutdown(s)
+}
+
+// ListenAndServeTLS starts the server in a goroutine and then calls Shutdown
+func ListenAndServeTLS(s TLSServer, certFile, keyFile string) {
+	go func() {
+		if err := s.ListenAndServeTLS(certFile, keyFile); err != http.ErrServerClosed {
 			logger.Fatal(err)
 		}
 	}()
@@ -154,9 +174,9 @@ func shutdown(s Shutdowner, logger Logger) {
 	if err := s.Shutdown(ctx); err != nil {
 		logger.Printf(ErrorFormat, err)
 	} else {
-		logger.Printf(FinishedHTTP)
-
 		if hs, ok := s.(*http.Server); ok {
+			logger.Printf(FinishedHTTP)
+
 			if hss, ok := hs.Handler.(Shutdowner); ok {
 				select {
 				case <-ctx.Done():
@@ -166,17 +186,15 @@ func shutdown(s Shutdowner, logger Logger) {
 					}
 				default:
 					if deadline, ok := ctx.Deadline(); ok {
-						secs := (deadline.Sub(time.Now()) + time.Second/2) / time.Second
+						secs := (time.Until(deadline) + time.Second/2) / time.Second
 						logger.Printf(HandlerShutdownFormat, secs)
 					}
 
 					done := make(chan error)
 
 					go func() {
-						select {
-						case <-ctx.Done():
-							done <- ctx.Err()
-						}
+						<-ctx.Done()
+						done <- ctx.Err()
 					}()
 
 					go func() {
@@ -192,8 +210,20 @@ func shutdown(s Shutdowner, logger Logger) {
 		}
 
 		if deadline, ok := ctx.Deadline(); ok {
-			secs := (deadline.Sub(time.Now()) + time.Second/2) / time.Second
+			secs := (time.Until(deadline) + time.Second/2) / time.Second
 			logger.Printf(FinishedFormat, secs)
 		}
 	}
+}
+
+func getLogger(loggers ...Logger) Logger {
+	if len(loggers) > 0 {
+		if loggers[0] != nil {
+			return loggers[0]
+		}
+
+		return log.New(ioutil.Discard, "", 0)
+	}
+
+	return log.New(os.Stdout, "", 0)
 }
