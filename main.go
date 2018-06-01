@@ -6,18 +6,17 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/TV4/graceful"
-	"github.com/alexcesaro/statsd"
 	"github.com/frozzare/hellobot/bot"
 	"github.com/getsentry/raven-go"
+	"github.com/stathat/go"
 )
 
 var (
-	c      *statsd.Client
-	bt     *bot.Bot
-	logger *log.Logger
+	stathatEmail string
+	bt           *bot.Bot
+	logger       *log.Logger
 )
 
 func init() {
@@ -29,16 +28,14 @@ func init() {
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
-		if c != nil {
-			logger.Println("Hello requests increment")
-			c.Increment("hello.requests")
+		if len(stathatEmail) > 0 {
+			stathat.PostEZCount("hello.requests", stathatEmail, 1)
 		}
 
 		if err := bt.SayHello(r); err != nil {
 			logger.Println(err)
-		} else if c != nil {
-			logger.Println("GitHub comments increment")
-			c.Increment("github.comments")
+		} else if len(stathatEmail) > 0 {
+			stathat.PostEZCount("github.comments", stathatEmail, 1)
 		}
 	}
 
@@ -54,17 +51,8 @@ func main() {
 		logger.Fatal("PORT environment variable is required")
 	}
 
-	if s := os.Getenv("STATSD_URL"); len(s) != 0 {
-		var err error
-		s = strings.Replace(s, "statsd://", "", -1)
-		c, err = statsd.New(
-			statsd.Address(s),
-			statsd.Prefix("hellobot"),
-		)
-		if err != nil {
-			logger.Fatal(err)
-		}
-		defer c.Close()
+	if s := os.Getenv("STATHAT_EMAIL"); len(s) != 0 {
+		stathatEmail = s
 	}
 
 	cert := os.Getenv("CERT")

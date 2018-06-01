@@ -1,6 +1,0 @@
-{
-	"ImportPath": "github.com/frozzare/hellobot",
-	"GoVersion": "go1.9",
-	"GodepVersion": "v79",
-	"Deps": []
-}
